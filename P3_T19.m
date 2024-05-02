@@ -692,60 +692,89 @@ legend('BPSK theoretical','BPSK ',  'QPSK Gray theoretical','QPSK Gray ','QPSK N
 
 
 %%%PSD
-clear ;
-clc;
 Eb = 1;
-Tb = 0.1;
+Tb = 0.07;
 delta_f = 1/Tb;
 f1 = 1/Tb;
 f2 = f1 + delta_f;
-samples = 4*delta_f;
-fs = samples/Tb;
-t = 0:Tb/(samples-1):Tb;
-realizations = 1000;
-num_bits = 500;
-data = randi([0,1], realizations, num_bits + 1 );
-delay = randi ([0,samples-1], realizations, 1 );
-
-%mapping
-Mapped_data = zeros(realizations,(samples*num_bits));
-for l = 1:realizations
-    for j = 1:(num_bits+1)
-        k = 1 + samples*(j-1);
-        if(data(l,j)==1)
-            Mapped_data(l,k:k+samples-1) = sqrt(2*Eb/Tb);  %S1BB
+fs = 100;
+t_tot = 7;                      
+t = 0:1/fs:Tb; 
+samples = 7;
+num_bits = 100;
+ensemble_size = 500;
+realizations=samples*num_bits;
+f = (-realizations/2 : realizations/2 - 1) * fs / realizations; 
+x0 = 0.5 / Tb;
+l=hamming(realizations+7);
+data = randi([0,1], ensemble_size, num_bits + 1 );
+data = repelem(data, 1, 7);
+Mapped_data = zeros(ensemble_size,(realizations+7));
+c=0;
+for i = 1:ensemble_size
+    for j = 1:realizations
+        if(data(i,j)==1)
+            Mapped_data(i,j) = sqrt(2*Eb/Tb);  %S1BB
         else
-            Mapped_data(l,k:k+samples-1)= sqrt(2*Eb/Tb)*(cos(2*pi*delta_f*t)+i*sin(2*pi*delta_f*t)); %S2BB
+            if c<7
+                c=c+1;
+            Mapped_data(i,j)= sqrt(2*Eb/Tb)*(cos(2*pi*delta_f*t(1,c))+1i*sin(2*pi*delta_f*t(1,c))); %S2BB
+            end
+            if c==7
+                c=0;
+            end
         end
     end
 end
-%adding delay
+Mapped_data = Mapped_data.*l';
+delay = randi ([0,samples-1], ensemble_size, 1 );
 Mapped_data_delayed = zeros(realizations,(samples*num_bits)); 
-for i=1:realizations
- Mapped_data_delayed(i,:)= Mapped_data( i, delay(i)+1 :samples*num_bits+delay(i)) ;
-end
-%calculating ACF
-ACF = zeros (1,(samples*num_bits)) ;
-for tau = 1: samples*num_bits
- for i = 1:realizations
- ACF(1,tau) = ACF(1,tau) + conj(Mapped_data_delayed(i , 1) )* ((Mapped_data_delayed(i , tau))) ;
- end
-end
-ACF = ACF/realizations ;
 
-ACF_tot = [flip(conj(ACF(1,2:samples*(num_bits)))) ACF];  %by symmetry
-%calculating PSD
-PSD = fft(ACF_tot) / num_bits;
-%PSD normalization
-PSD_normalized = abs(PSD) / max(abs(PSD));
+for i = 1:ensemble_size
+    Mapped_data_delayed(i, :) = Mapped_data(i, 1 + delay(i) : realizations + delay(i));
+end
+ACF = zeros (1,(realizations)) ;
 
+
+    for tau = -349:350
+        
+        prodofconj = conj(Mapped_data_delayed(:, realizations/2)) .* Mapped_data_delayed(:, realizations/2 + tau);
+       
+        ACF(tau + realizations/2) = sum(prodofconj) / realizations;
+    end
+
+PSD  =abs(fftshift(fft(ACF)));
+PSD_normalized = (PSD)/fs ;
 figure;
-N = length(ACF_tot); 
-k = -N/2 : N/2-1;
-x = k*fs/(N);
-plot(x, fftshift(PSD_normalized))
+plot(f*Tb, PSD_normalized);
 xlabel('Freq (HZ)');
 ylabel('Amplitude');
-xlim([-30 30]);
+xlim([-1 2]);
+ylim([0 2]);
 grid on;
-title('Normalized Power Spectral Density');
+title('Practical Psd');
+
+delta1 = 99 * double(abs(f - (x0)) < 0.01); 
+delta2 =99 * double(abs(f - (-x0)) < 0.01); 
+theoretical_psd = ((2/Tb) * (delta1 + delta2)) +((8 * cos(pi * Tb * f).^2) ./ (pi^2 * (4 * Tb^2 * f.^2 - 1).^2));
+figure;
+plot((f*Tb)+.5, (theoretical_psd));
+xlabel('Frequency');
+ylabel('Amplitude');
+title('Theoretical psd');
+grid on;
+ylim([0 2]);
+xlim([-2 2]);
+
+figure;
+plot((f*Tb)+.5, theoretical_psd);
+hold on;
+plot(f*Tb, PSD_normalized,'r');
+hold off;
+xlabel('Freq (HZ)');
+ylabel('Amplitude');
+title('Comparision between Theoretical and Practical psd');
+grid on;
+legend 'theoretical psd' 'Practical psd';
+ylim([0 2]);
+xlim([-2 2]);

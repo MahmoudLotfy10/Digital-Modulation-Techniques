@@ -712,7 +712,7 @@ data = repelem(data, 1, 7);
 Mapped_data = zeros(ensemble_size,(realizations+7));
 c=0;
 for i = 1:ensemble_size
-    for j = 1:realizations
+    for j = 1:realizations+samples
         if(data(i,j)==1)
             Mapped_data(i,j) = sqrt(2*Eb/Tb);  %S1BB
         else
